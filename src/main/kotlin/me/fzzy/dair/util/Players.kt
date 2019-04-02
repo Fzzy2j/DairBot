@@ -13,6 +13,14 @@ class Players {
         return allPlayers.containsKey(id)
     }
 
+    fun remove(player: Player) {
+        remove(player.id)
+    }
+
+    fun remove(id: Long) {
+        allPlayers.remove(id)
+    }
+
     fun set(player: Player) {
         Bot.leaderboard.setValue(player.id, player.elo)
         allPlayers[player.id] = player
