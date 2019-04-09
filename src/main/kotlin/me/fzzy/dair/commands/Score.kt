@@ -47,6 +47,7 @@ object Score : Command {
             }
         }
 
+
         Bot.updateLeaderboard()
         Bot.save()
         return CommandResult.success()

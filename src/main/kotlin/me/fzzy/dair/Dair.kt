@@ -2,14 +2,12 @@ package me.fzzy.dair
 
 import com.google.gson.Gson
 import com.google.gson.stream.JsonReader
-import me.fzzy.dair.commands.LeaderboardCommand
 import me.fzzy.dair.commands.Score
 import me.fzzy.dair.util.Players
 import sx.blah.discord.Discord4J
 import sx.blah.discord.api.ClientBuilder
 import sx.blah.discord.api.IDiscordClient
 import sx.blah.discord.util.EmbedBuilder
-import sx.blah.discord.util.RequestBuffer
 import sx.blah.discord.util.RequestBuilder
 import java.io.BufferedWriter
 import java.io.File
@@ -26,11 +24,7 @@ fun main(args: Array<String>) {
     Bot.client = ClientBuilder().withToken(discordToken).build()
     if (playersFile.exists()) Bot.players =
         gson.fromJson(JsonReader(InputStreamReader(playersFile.inputStream())), Players::class.java)
-    for (player in Bot.players.all) {
-        Bot.leaderboard.setValue(player.id, player.elo)
-    }
 
-    CommandHandler.registerCommand("leaderboard", LeaderboardCommand)
     CommandHandler.registerCommand("score", Score)
 
     Bot.client.dispatcher.registerListener(CommandHandler)
@@ -40,8 +34,6 @@ fun main(args: Array<String>) {
 
 object Bot {
     var players = Players()
-
-    val leaderboard = Leaderboard()
 
     const val LEADERBOARD_CHANNEL_ID = 562445542441877529
 
@@ -88,6 +80,7 @@ object Bot {
                 builder = EmbedBuilder()
             }
         }
+
 
         msgBuilder.execute()
     }
