@@ -44,17 +44,17 @@ object Bot {
     fun save() {
         File("data").mkdirs()
         val bufferWriter = BufferedWriter(FileWriter(playersFile.absoluteFile, false))
-        val save = gson.toJson(Bot.players)
+        val save = gson.toJson(players)
         bufferWriter.write(save)
         bufferWriter.close()
     }
 
     fun getLeaderboard(): List<Player> {
-        return Bot.players.all.sortedByDescending { it.elo }
+        return players.all.sortedByDescending { it.elo }
     }
 
     fun updateLeaderboard() {
-        val channel = Bot.client.getChannelByID(Bot.LEADERBOARD_CHANNEL_ID)
+        val channel = Bot.client.getChannelByID(LEADERBOARD_CHANNEL_ID)
         val msgBuilder = RequestBuilder(client).shouldBufferRequests(true).doAction { true }
         for (msg in channel.fullMessageHistory) {
             msgBuilder.andThen {
