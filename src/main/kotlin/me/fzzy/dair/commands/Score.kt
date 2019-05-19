@@ -1,14 +1,8 @@
 package me.fzzy.dair.commands
 
-import me.fzzy.dair.Bot
-import me.fzzy.dair.Command
-import me.fzzy.dair.CommandResult
-import me.fzzy.dair.util.Elo
+import me.fzzy.dair.*
 import me.fzzy.dair.util.SmashGGApi
 import sx.blah.discord.handle.impl.events.guild.channel.message.MessageReceivedEvent
-import sx.blah.discord.util.EmbedBuilder
-import sx.blah.discord.util.RequestBuffer
-import sx.blah.discord.util.RequestBuilder
 
 object Score : Command {
     override val description: String = "adds scores from a smash.gg tournament into the leaderboard"
@@ -22,33 +16,31 @@ object Score : Command {
             when (args[0]) {
                 "delete" -> {
                     val rankToDelete = args[1].toInt()
-                    Bot.players.remove(Bot.getLeaderboard()[rankToDelete - 1])
+                    val player = Bot.getLeaderboard()[rankToDelete - 1]
+                    Bot.matches.deletedIds.add(player.p.id)
+                }
+                "update" -> {
+                    Bot.updateLeaderboard(event.channel)
                 }
                 else -> {
                     val api = SmashGGApi(args[0].toInt())
 
                     for (set in api.sets.values) {
-                        val p1 = Bot.players.getOrDefault(set.entrant1Id, set.entrant1Name)
-                        val p2 = Bot.players.getOrDefault(set.entrant2Id, set.entrant2Name)
-                        if (p1.name.isBlank() || p2.name.isBlank()) continue
+                        if (set.entrant1Score == -1 || set.entrant2Score == -1) continue
 
-                        if (set.entrant1Score != -1) p1.wins += set.entrant1Score
-                        if (set.entrant2Score != -1) p2.wins += set.entrant2Score
+                        val player1 = Player(set.entrant1Name, set.entrant1Id)
+                        val player2 = Player(set.entrant2Name, set.entrant2Id)
 
-                        if (set.entrant1Score > set.entrant2Score)
-                            Elo.doMatch(p1, p2, true)
-                        else
-                            Elo.doMatch(p1, p2, false)
+                        if (player1.name.isBlank() || player2.name.isBlank()) continue
 
-                        Bot.players.set(p1)
-                        Bot.players.set(p2)
+                        val match = Matches.Match(player1, player2, set.entrant1Score > set.entrant2Score)
+                        Bot.matches.matches.add(match)
+                        match.doMatch()
                     }
                 }
             }
         }
 
-
-        Bot.updateLeaderboard()
         Bot.save()
         return CommandResult.success()
     }
