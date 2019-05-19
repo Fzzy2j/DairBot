@@ -7,6 +7,7 @@ import me.fzzy.dair.util.Players
 import sx.blah.discord.Discord4J
 import sx.blah.discord.api.ClientBuilder
 import sx.blah.discord.api.IDiscordClient
+import sx.blah.discord.handle.obj.IChannel
 import sx.blah.discord.util.EmbedBuilder
 import sx.blah.discord.util.RequestBuilder
 import java.io.BufferedWriter
@@ -16,16 +17,16 @@ import java.io.InputStreamReader
 
 val gson = Gson()
 
-val playersFile = File("data${File.separator}players.json")
+val matchesFile = File("data${File.separator}matches.json")
 
 fun main(args: Array<String>) {
     val discordToken = args[0]
 
     Bot.client = ClientBuilder().withToken(discordToken).build()
-    if (playersFile.exists()) Bot.players =
-        gson.fromJson(JsonReader(InputStreamReader(playersFile.inputStream())), Players::class.java)
 
     CommandHandler.registerCommand("score", Score)
+
+    Bot.load()
 
     Bot.client.dispatcher.registerListener(CommandHandler)
     Discord4J.LOGGER.info("Logging in.")
@@ -34,8 +35,7 @@ fun main(args: Array<String>) {
 
 object Bot {
     var players = Players()
-
-    const val LEADERBOARD_CHANNEL_ID = 562445542441877529
+    var matches = Matches()
 
     lateinit var client: IDiscordClient
 
@@ -43,18 +43,26 @@ object Bot {
 
     fun save() {
         File("data").mkdirs()
-        val bufferWriter = BufferedWriter(FileWriter(playersFile.absoluteFile, false))
-        val save = gson.toJson(players)
+        val bufferWriter = BufferedWriter(FileWriter(matchesFile.absoluteFile, false))
+        val save = gson.toJson(matches)
         bufferWriter.write(save)
         bufferWriter.close()
     }
 
-    fun getLeaderboard(): List<Player> {
+    fun load() {
+        if (matchesFile.exists()) {
+            matches = gson.fromJson(JsonReader(InputStreamReader(matchesFile.inputStream())), Matches::class.java)
+            for (match in matches.matches) {
+                match.doMatch()
+            }
+        }
+    }
+
+    fun getLeaderboard(): List<Players.LivePlayer> {
         return players.all.sortedByDescending { it.elo }
     }
 
-    fun updateLeaderboard() {
-        val channel = Bot.client.getChannelByID(LEADERBOARD_CHANNEL_ID)
+    fun updateLeaderboard(channel: IChannel) {
         val msgBuilder = RequestBuilder(client).shouldBufferRequests(true).doAction { true }
         for (msg in channel.fullMessageHistory) {
             msgBuilder.andThen {
@@ -64,20 +72,24 @@ object Bot {
         }
         var builder = EmbedBuilder()
         val leaderboard = getLeaderboard()
+        var rank = leaderboard.size - 1
         for (i in leaderboard.size - 1 downTo 0) {
             val player = leaderboard[i]
 
-            val title = "#${i + 1} - ${player.name}"
-            val description = "${Math.round(player.elo)} points"
-            builder.appendField(title, description, false)
-            if (i % 25 == 0) {
-                builder.withColor(0, 103, 231)
-                val msg = builder.build()
-                msgBuilder.andThen {
-                    channel.sendMessage(msg)
-                    true
+            if (!matches.deletedIds.contains(player.p.id)) {
+                val title = "#${rank + 1} - ${player.p.name}"
+                val description = "${Math.round(player.elo)} points"
+                builder.appendField(title, description, false)
+                if (i % 25 == 0) {
+                    builder.withColor(0, 103, 231)
+                    val msg = builder.build()
+                    msgBuilder.andThen {
+                        channel.sendMessage(msg)
+                        true
+                    }
+                    builder = EmbedBuilder()
                 }
-                builder = EmbedBuilder()
+                rank--
             }
         }
 

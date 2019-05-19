@@ -1,44 +1,42 @@
 package me.fzzy.dair.util
 
-import me.fzzy.dair.Bot
 import me.fzzy.dair.Player
 
 class Players {
-    private val allPlayers = hashMapOf<Long, Player>()
+    private val allPlayers = hashMapOf<Long, LivePlayer>()
 
-    val all: Collection<Player>
+    val all: Collection<LivePlayer>
         get() = allPlayers.values
 
     fun exists(id: Long): Boolean {
         return allPlayers.containsKey(id)
     }
 
-    fun remove(player: Player) {
-        remove(player.id)
+    fun remove(player: LivePlayer) {
+        remove(player.p.id)
     }
 
     fun remove(id: Long) {
         allPlayers.remove(id)
     }
 
-    fun set(player: Player) {
-        Bot.leaderboard.setValue(player.id, player.elo)
-        allPlayers[player.id] = player
+    fun set(player: LivePlayer) {
+        allPlayers[player.p.id] = player
     }
 
-    fun getOrDefault(id: Long, player: Player): Player {
-        return allPlayers.getOrDefault(id, player)
+    fun getOrCreate(player: Player): LivePlayer {
+        if (!allPlayers.containsKey(player.id))
+            allPlayers[player.id] = getDefaultPlayer(player)
+        return allPlayers[player.id]!!
     }
 
-    fun getOrDefault(id: Long, name: String): Player {
-        return allPlayers.getOrDefault(id, getDefaultPlayer(id, name))
-    }
-
-    fun get(id: Long): Player? {
+    fun get(id: Long): LivePlayer? {
         return allPlayers[id]
     }
 
-    fun getDefaultPlayer(id: Long, name: String): Player {
-        return Player(0, name, id, 1000f)
+    fun getDefaultPlayer(player: Player): LivePlayer {
+        return LivePlayer(player, 1000f, 0)
     }
+
+    class LivePlayer(val p: Player, var elo: Float, var wins: Int)
 }
