@@ -1,6 +1,7 @@
 package me.fzzy.dair.commands
 
 import me.fzzy.dair.*
+import me.fzzy.dair.util.MatchSet
 import me.fzzy.dair.util.SmashGGApi
 import sx.blah.discord.handle.impl.events.guild.channel.message.MessageReceivedEvent
 
@@ -14,29 +15,33 @@ object Score : Command {
         if (event.author.longID != Bot.client.applicationOwner.longID) return CommandResult.success()
         if (args.isNotEmpty()) {
             when (args[0]) {
-                "delete" -> {
-                    val rankToDelete = args[1].toInt()
-                    val player = Bot.getLeaderboard()[rankToDelete - 1]
-                    Bot.matches.deletedIds.add(player.p.id)
-                }
                 "update" -> {
-                    Bot.updateLeaderboard(event.channel)
+                    Bot.updateLeaderboard(event.channel, Bot.glicko2Board)
+                }
+                "recalc" -> {
+                    Bot.recalculate()
                 }
                 else -> {
-                    val api = SmashGGApi(args[0].toInt())
+                    val id = args[0].split("/")
+                    val api = SmashGGApi(id[id.count() - 1].toInt())
 
+                    val matches = arrayListOf<Match>()
                     for (set in api.sets.values) {
                         if (set.entrant1Score == -1 || set.entrant2Score == -1) continue
 
-                        val player1 = Player(set.entrant1Name, set.entrant1Id)
-                        val player2 = Player(set.entrant2Name, set.entrant2Id)
+                        if (set.entrant1Name.isBlank() || set.entrant2Name.isBlank()) continue
 
-                        if (player1.name.isBlank() || player2.name.isBlank()) continue
-
-                        val match = Matches.Match(player1, player2, set.entrant1Score > set.entrant2Score)
-                        Bot.matches.matches.add(match)
-                        match.doMatch()
+                        for (i in 0 until set.entrant1Score) {
+                            val match = Match(set.entrant1Name, set.entrant2Name)
+                            matches.add(match)
+                        }
+                        for (i in 0 until set.entrant2Score) {
+                            val match = Match(set.entrant2Name, set.entrant1Name)
+                            matches.add(match)
+                        }
                     }
+                    val set = MatchSet(args[0], matches)
+                    Bot.addSet(set)
                 }
             }
         }

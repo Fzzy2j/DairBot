@@ -1,9 +1,14 @@
 package me.fzzy.dair
 
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
+import me.fzzy.dair.boards.EloBoard
+import me.fzzy.dair.boards.Glicko2Board
+import me.fzzy.dair.boards.glicko2.RatingCalculator
 import me.fzzy.dair.commands.Score
-import me.fzzy.dair.util.Players
+import me.fzzy.dair.util.MatchSet
+import org.json.JSONArray
 import sx.blah.discord.Discord4J
 import sx.blah.discord.api.ClientBuilder
 import sx.blah.discord.api.IDiscordClient
@@ -14,6 +19,7 @@ import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.io.InputStreamReader
+import java.text.DecimalFormat
 
 val gson = Gson()
 
@@ -34,35 +40,49 @@ fun main(args: Array<String>) {
 }
 
 object Bot {
-    var players = Players()
-    var matches = Matches()
+    private var sets = arrayListOf<MatchSet>()
+    val eloBoard = EloBoard()
+    val glicko2Board = Glicko2Board()
 
     lateinit var client: IDiscordClient
 
     const val BOT_PREFIX = "."
 
+    fun addSet(set: MatchSet) {
+        this.sets.add(set)
+        eloBoard.doMatches(set)
+        glicko2Board.doMatches(set)
+    }
+
+    fun recalculate() {
+        eloBoard.clear()
+        glicko2Board.clear()
+        for (match in sets) {
+            eloBoard.doMatches(match)
+            glicko2Board.doMatches(match)
+        }
+    }
+
     fun save() {
         File("data").mkdirs()
         val bufferWriter = BufferedWriter(FileWriter(matchesFile.absoluteFile, false))
-        val save = gson.toJson(matches)
-        bufferWriter.write(save)
+        val save = JSONArray(gson.toJson(sets))
+        bufferWriter.write(save.toString(2))
         bufferWriter.close()
     }
 
     fun load() {
         if (matchesFile.exists()) {
-            matches = gson.fromJson(JsonReader(InputStreamReader(matchesFile.inputStream())), Matches::class.java)
-            for (match in matches.matches) {
-                match.doMatch()
+            val type = object : TypeToken<ArrayList<MatchSet>>() {}.type
+            val sets: ArrayList<MatchSet> =
+                gson.fromJson(JsonReader(InputStreamReader(matchesFile.inputStream())), type)
+            for (set in sets) {
+                addSet(set)
             }
         }
     }
 
-    fun getLeaderboard(): List<Players.LivePlayer> {
-        return players.all.sortedByDescending { it.elo }
-    }
-
-    fun updateLeaderboard(channel: IChannel) {
+    fun updateLeaderboard(channel: IChannel, board: Board) {
         val msgBuilder = RequestBuilder(client).shouldBufferRequests(true).doAction { true }
         for (msg in channel.fullMessageHistory) {
             msgBuilder.andThen {
@@ -71,25 +91,27 @@ object Bot {
             }
         }
         var builder = EmbedBuilder()
-        val leaderboard = getLeaderboard()
-        var rank = leaderboard.size - 1
-        for (i in leaderboard.size - 1 downTo 0) {
-            val player = leaderboard[i]
+        for (i in board.leaderboard.size() downTo 1) {
+            val player = board.leaderboard.getAtRank(i)!!
+            val rank = board.leaderboard.getRank(player)!!
+            val score = board.leaderboard.getScore(player)!!
 
-            if (!matches.deletedIds.contains(player.p.id)) {
-                val title = "#${rank + 1} - ${player.p.name}"
-                val description = "${Math.round(player.elo)} points"
-                builder.appendField(title, description, false)
-                if (i % 25 == 0) {
-                    builder.withColor(0, 103, 231)
-                    val msg = builder.build()
-                    msgBuilder.andThen {
-                        channel.sendMessage(msg)
-                        true
-                    }
-                    builder = EmbedBuilder()
+            val title = "#$rank - $player"
+            var description = "$score points"
+            if (board is Glicko2Board) {
+                val minimum = board.glickoPlayers[player]!!.glicko2Rating - board.glickoPlayers[player]!!.glicko2RatingDeviation * 2
+                val eloStyle = minimum * RatingCalculator.MULTIPLIER + RatingCalculator.DEFAULT_RATING
+                description = "${Math.round(eloStyle)} - ${Math.round(board.glickoPlayers[player]!!.glicko2RatingDeviation * 100)}"
+            }
+            builder.appendField(title, description, false)
+            if (i % 25 == 1) {
+                builder.withColor(0, 103, 231)
+                val msg = builder.build()
+                msgBuilder.andThen {
+                    channel.sendMessage(msg)
+                    true
                 }
-                rank--
+                builder = EmbedBuilder()
             }
         }
 
